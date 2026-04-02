@@ -1,0 +1,386 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: PodLearn AI API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: content
+    description: Content processing operations
+  - name: podcast
+    description: Podcast generation operations
+  - name: qa
+    description: Question & Answer operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [content]
+      summary: List all podcast sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PodcastSession"
+    post:
+      operationId: createSession
+      tags: [content]
+      summary: Create a new session
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastSession"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [content]
+      summary: Get a session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSession
+      tags: [content]
+      summary: Delete a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /sessions/{id}/upload:
+    post:
+      operationId: uploadContent
+      tags: [content]
+      summary: Upload content (URL or text) to a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadContentBody"
+      responses:
+        "200":
+          description: Content processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadContentResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/generate:
+    post:
+      operationId: generatePodcast
+      tags: [podcast]
+      summary: Generate podcast script and audio for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeneratePodcastBody"
+      responses:
+        "200":
+          description: Podcast generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratePodcastResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/ask:
+    post:
+      operationId: askQuestion
+      tags: [qa]
+      summary: Ask a question about the session content
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskQuestionBody"
+      responses:
+        "200":
+          description: Answer generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskQuestionResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/audio/{filename}:
+    get:
+      operationId: getAudioFile
+      tags: [podcast]
+      summary: Get an audio file for a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audio file
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    DialogueTurn:
+      type: object
+      properties:
+        host:
+          type: string
+          enum: [A, B]
+        text:
+          type: string
+      required:
+        - host
+        - text
+
+    PodcastSession:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [idle, processing, ready, error]
+        contentType:
+          type: ["string", "null"]
+          enum: [url, text, pdf, "null"]
+        contentPreview:
+          type: ["string", "null"]
+        podcastStyle:
+          type: ["string", "null"]
+          enum: [casual, technical, storytelling, "null"]
+        scriptTurns:
+          type: ["integer", "null"]
+        audioUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - createdAt
+        - updatedAt
+
+    UploadContentBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [url, text]
+        content:
+          type: string
+        title:
+          type: ["string", "null"]
+      required:
+        - type
+        - content
+
+    UploadContentResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        contentPreview:
+          type: string
+        chunkCount:
+          type: integer
+        message:
+          type: string
+      required:
+        - sessionId
+        - contentPreview
+        - chunkCount
+        - message
+
+    GeneratePodcastBody:
+      type: object
+      properties:
+        style:
+          type: string
+          enum: [casual, technical, storytelling]
+        tone:
+          type: string
+          enum: [friendly, professional, humorous, serious]
+        accent:
+          type: string
+          enum: [american, british, australian, neutral]
+        length:
+          type: string
+          enum: [concise, descriptive]
+      required: []
+
+    GeneratePodcastResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        script:
+          type: array
+          items:
+            $ref: "#/components/schemas/DialogueTurn"
+        audioUrl:
+          type: ["string", "null"]
+        message:
+          type: string
+      required:
+        - sessionId
+        - message
+
+    AskQuestionBody:
+      type: object
+      properties:
+        question:
+          type: string
+      required:
+        - question
+
+    AskQuestionResponse:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        answerAudioUrl:
+          type: ["string", "null"]
+        relevantChunks:
+          type: array
+          items:
+            type: string
+      required:
+        - question
+        - answer
+        - relevantChunks
