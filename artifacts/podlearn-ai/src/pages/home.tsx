@@ -8,11 +8,13 @@ import {
   useGetSession,
   useListSessions,
   useAskQuestion,
+  getListSessionsQueryKey,
+  getGetSessionQueryKey,
 } from "@workspace/api-client-react";
 import type {
   PodcastSession,
   DialogueTurn,
-} from "@workspace/api-client-react/src/generated/api.schemas";
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,7 +91,7 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar view={view} onViewChange={setView} />
-      <main className={`flex-1 overflow-auto${showMiniPlayer ? " pb-16" : ""}`}>
+      <main className={`flex-1 overflow-auto ${showMiniPlayer ? "pb-28 md:pb-16" : "pb-16 md:pb-0"}`}>
         {view === "generate" && (
           <GeneratePage onSessionReady={handleSessionReady} />
         )}
@@ -120,6 +122,7 @@ export default function Home() {
           onExpand={() => setView("player")}
         />
       )}
+      <BottomNav view={view} onViewChange={setView} />
     </div>
   );
 }
@@ -163,7 +166,7 @@ function Sidebar({ view, onViewChange }: { view: View; onViewChange: (v: View) =
   ];
 
   return (
-    <aside className="w-56 shrink-0 bg-card border-r border-border flex flex-col h-full">
+    <aside className="w-56 shrink-0 bg-card border-r border-border hidden md:flex flex-col h-full">
       <div className="px-5 py-5 border-b border-border">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
@@ -230,6 +233,9 @@ function GeneratePage({ onSessionReady }: { onSessionReady: (id: string, script?
     neutral: "Neutral",
   };
 
+  const hostA = "Jamie";
+  const hostB = "Alex";
+
   const summary = `Create a ${style} conversation for a ${tone} audience with a ${length} duration. The accent will be ${accent}.`;
 
   const handleGenerate = async () => {
@@ -263,9 +269,9 @@ function GeneratePage({ onSessionReady }: { onSessionReady: (id: string, script?
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-foreground mb-1">Generate a conversation</h1>
+    <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-10">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-semibold text-foreground mb-1">Generate a conversation</h1>
         <p className="text-muted-foreground text-sm">Discussions are generated with AI voices</p>
       </div>
 
@@ -329,8 +335,8 @@ function GeneratePage({ onSessionReady }: { onSessionReady: (id: string, script?
               <span className="ml-1 text-muted-foreground font-normal text-xs">(AI generated)</span>
             </h2>
             <div className="flex items-center gap-6">
-              <VoiceAvatar name="Jamie" role="Host" gradient="from-amber-400 to-orange-500" />
-              <VoiceAvatar name="Alex" role="Guest" gradient="from-violet-500 to-indigo-600" />
+              <VoiceAvatar name={hostA} role="Host" gradient="from-amber-400 to-orange-500" />
+              <VoiceAvatar name={hostB} role="Guest" gradient="from-violet-500 to-indigo-600" />
             </div>
           </div>
         </div>
@@ -495,6 +501,7 @@ function ErrorCard({ session }: { session: PodcastSession }) {
 function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
   const { data: sessions, isLoading } = useListSessions({
     query: {
+      queryKey: getListSessionsQueryKey(),
       refetchInterval: (q) => {
         const data = q.state.data;
         return data?.some((s) => s.status === "processing") ? 4000 : false;
@@ -508,9 +515,9 @@ function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
   const hasAny = processingSessions.length > 0 || errorSessions.length > 0 || readySessions.length > 0;
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-foreground mb-1">My Library</h1>
+    <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-10">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-semibold text-foreground mb-1">My Library</h1>
         <p className="text-muted-foreground text-sm">Your generated podcast conversations</p>
       </div>
 
@@ -780,11 +787,14 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
 }, ref) {
   const { data: session } = useGetSession(sessionId, {
     query: {
+      queryKey: getGetSessionQueryKey(sessionId),
       refetchInterval: (q) => (q.state.data?.status === "processing" ? 3000 : false),
     },
   });
 
   const transcript = initialTranscript ?? session?.script ?? null;
+  const playerHostA = "Jamie";
+  const playerHostB = "Alex";
   const { getToken } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const answerAudioRef = useRef<HTMLAudioElement>(null);
@@ -792,6 +802,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
   const audioBlobUrlRef = useRef<string | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [audioFetchError, setAudioFetchError] = useState<string | null>(null);
   const lastFetchedAudioUrl = useRef<string | null>(null);
   const activeTurnRef = useRef<HTMLDivElement>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
@@ -857,19 +868,29 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
     let cancelled = false;
     setAudioReady(false);
     setAudioLoading(true);
+    setAudioFetchError(null);
 
     (async () => {
       try {
         const token = await getToken();
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        console.log("[audio] Fetching:", audioUrl);
         const res = await fetch(audioUrl, { headers, cache: "no-store" });
-        console.log("[audio] Response status:", res.status, "ok:", res.ok);
-        if (!res.ok || cancelled) { setAudioLoading(false); return; }
+        if (cancelled) return;
+        if (!res.ok) {
+          const msg = res.status === 404
+            ? "Audio file not found. It may have been generated on a different machine."
+            : `Could not load audio (${res.status}).`;
+          setAudioFetchError(msg);
+          setAudioLoading(false);
+          return;
+        }
         const blob = await res.blob();
-        console.log("[audio] Blob size:", blob.size, "type:", blob.type);
-        if (cancelled || blob.size === 0) { setAudioLoading(false); return; }
+        if (cancelled || blob.size === 0) {
+          setAudioFetchError("Audio file is empty.");
+          setAudioLoading(false);
+          return;
+        }
         const oldUrl = audioBlobUrlRef.current;
         const blobUrl = URL.createObjectURL(blob);
         audioBlobUrlRef.current = blobUrl;
@@ -878,10 +899,12 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
         setAudioBlobUrl(blobUrl);
         setAudioLoading(false);
         setAudioReady(true);
-        console.log("[audio] Ready! blobUrl:", blobUrl);
       } catch (e) {
         console.error("[audio] Failed to fetch:", e);
-        if (!cancelled) setAudioLoading(false);
+        if (!cancelled) {
+          setAudioFetchError("Network error loading audio.");
+          setAudioLoading(false);
+        }
       }
     })();
 
@@ -1052,8 +1075,8 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
 
   if (session?.status === "processing") {
     return (
-      <div className="max-w-4xl mx-auto px-8 py-10">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-10">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 md:mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to library
         </button>
         <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -1071,12 +1094,12 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-10">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors">
+    <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-10">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 md:mb-8 transition-colors">
         <ArrowLeft className="w-4 h-4" /> Back to library
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
         <div className="lg:col-span-7 space-y-6">
           <div className={`rounded-2xl bg-gradient-to-br ${gradient} p-6 shadow-lg relative overflow-hidden`}>
             {raiseHandState !== "idle" && (
@@ -1161,8 +1184,8 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
                 </h2>
               </div>
               <div className="flex items-center gap-1">
-                <VoiceAvatar name="Jamie" role="" gradient="from-amber-400 to-orange-500" />
-                <VoiceAvatar name="Alex" role="" gradient="from-violet-400 to-indigo-500" />
+                <VoiceAvatar name={playerHostA} role="" gradient="from-amber-400 to-orange-500" />
+                <VoiceAvatar name={playerHostB} role="" gradient="from-violet-400 to-indigo-500" />
               </div>
             </div>
 
@@ -1178,6 +1201,21 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
               onPause={() => setIsPlaying(false)}
             />
             <audio ref={answerAudioRef} />
+
+            {audioFetchError && (
+              <div className="mb-4 rounded-xl bg-red-500/20 border border-red-400/30 px-4 py-3 flex items-start gap-3">
+                <span className="text-red-300 text-sm leading-snug flex-1">{audioFetchError}</span>
+                <button
+                  className="text-red-300 hover:text-white text-xs underline shrink-0"
+                  onClick={() => {
+                    setAudioFetchError(null);
+                    lastFetchedAudioUrl.current = null;
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
 
             <div className="h-1.5 bg-white/20 rounded-full mb-1 cursor-pointer" onClick={handleSeek}>
               <div className="h-full bg-white rounded-full transition-all" style={{ width: `${progress}%` }} />
@@ -1262,7 +1300,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
                       className="text-xs font-semibold mb-1.5 uppercase tracking-wider"
                       style={{ color: transcript[activeTurnIndex].host === "A" ? "#fbbf24" : "#a78bfa" }}
                     >
-                      {transcript[activeTurnIndex].host === "A" ? "Jamie" : "Alex"}
+                      {transcript[activeTurnIndex].host === "A" ? playerHostA : playerHostB}
                     </p>
                     <p className="text-white text-sm leading-relaxed">
                       <WordHighlightText
@@ -1305,7 +1343,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
                 <div className="py-2">
                   {transcript.map((turn, idx) => {
                     const isActive = idx === activeTurnIndex;
-                    const isJamie = turn.host === "A";
+                    const isHostA = turn.host === "A";
                     return (
                       <div
                         key={idx}
@@ -1315,15 +1353,15 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
                         }`}
                       >
                         <div className={`w-6 h-6 rounded-full bg-gradient-to-br shrink-0 flex items-center justify-center mt-0.5 ${
-                          isJamie ? "from-amber-400 to-orange-500" : "from-violet-500 to-indigo-600"
+                          isHostA ? "from-amber-400 to-orange-500" : "from-violet-500 to-indigo-600"
                         }`}>
-                          <span className="text-white text-[10px] font-bold">{isJamie ? "J" : "A"}</span>
+                          <span className="text-white text-[10px] font-bold">{isHostA ? playerHostA[0] : playerHostB[0]}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className={`text-xs font-semibold mb-0.5 block ${
-                            isJamie ? "text-amber-600" : "text-violet-600"
+                            isHostA ? "text-amber-600" : "text-violet-600"
                           }`}>
-                            {isJamie ? "Jamie" : "Alex"}
+                            {isHostA ? playerHostA : playerHostB}
                           </span>
                           <p className={`text-sm leading-relaxed transition-all duration-300 ${
                             isActive ? "text-foreground font-medium" : "text-muted-foreground"
@@ -1340,7 +1378,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
           )}
         </div>
 
-        <div className="lg:col-span-5 h-[calc(100vh-10rem)] sticky top-6">
+        <div className="lg:col-span-5 h-80 md:h-[calc(100vh-10rem)] md:sticky md:top-6">
           <QAChat
             sessionId={sessionId}
             disabled={session?.status !== "ready"}
@@ -1398,7 +1436,7 @@ function MiniPlayer({
   const gradient = styleColors[session?.podcastStyle ?? "casual"] ?? "from-violet-600 to-indigo-700";
 
   return (
-    <div className="fixed bottom-0 left-56 right-0 bg-card/95 backdrop-blur border-t border-border shadow-xl z-50">
+    <div className="fixed bottom-16 md:bottom-0 left-0 md:left-56 right-0 bg-card/95 backdrop-blur border-t border-border shadow-xl z-50">
       <div className="h-0.5 bg-muted">
         <div
           className="h-full bg-primary transition-all duration-300"
@@ -1434,6 +1472,30 @@ function MiniPlayer({
         </button>
       </div>
     </div>
+  );
+}
+
+function BottomNav({ view, onViewChange }: { view: View; onViewChange: (v: View) => void }) {
+  const navItems = [
+    { id: "generate" as View, label: "Generate", icon: Zap },
+    { id: "library" as View, label: "Library", icon: BookOpen },
+  ];
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur border-t border-border z-40 flex md:hidden">
+      {navItems.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          onClick={() => onViewChange(id)}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 text-xs font-medium transition-colors ${
+            view === id ? "text-primary" : "text-foreground/50"
+          }`}
+        >
+          <Icon className={`w-5 h-5 ${view === id ? "stroke-primary" : ""}`} />
+          {label}
+        </button>
+      ))}
+    </nav>
   );
 }
 

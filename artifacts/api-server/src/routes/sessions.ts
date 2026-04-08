@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
+import { db, supabase } from "../../lib/db";
 import {
   ListSessionsResponse,
   GetSessionResponse,
@@ -26,6 +26,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUDIO_DIR = path.join(__dirname, "..", "..", "audio");
 
 await mkdir(AUDIO_DIR, { recursive: true });
+
+const STORAGE_BUCKET = "podcast-audio";
+// Ensure the bucket exists — ignore "already exists" errors
+try {
+  const { error } = await supabase.storage.createBucket(STORAGE_BUCKET, {
+    public: false,
+  });
+  if (error && !error.message.includes("already exists")) {
+    console.warn("[storage] Bucket create warning:", error.message);
+  } else if (!error) {
+    console.log("[storage] Created bucket:", STORAGE_BUCKET);
+  }
+} catch (e: any) {
+  console.warn("[storage] Bucket init error:", e?.message ?? e);
+}
 
 const router: IRouter = Router();
 
@@ -158,6 +173,8 @@ async function generatePodcastScript(
     neutral: "Both hosts use clear, accent-neutral international English — accessible to global listeners.",
   };
 
+  const hostNames = { A: "Jamie", B: "Alex" };
+
   const turnRange = length === "concise" ? "10-14 turns" : "20-26 turns";
   const depthGuide = length === "concise"
     ? "Be focused and efficient — hit the key points with impact. Every turn counts, so don't linger."
@@ -168,8 +185,8 @@ async function generatePodcastScript(
 Write a two-host conversational podcast script that will be read aloud by text-to-speech voices — so it must sound EXACTLY like natural spoken conversation.
 
 HOST CHARACTERS:
-Host A (Jamie): Curious, slightly nervous energy. Represents the eager learner. Reacts authentically — surprised, excited, confused, delighted.
-Host B (Alex): Warm and engaging expert. Makes complex things accessible through stories, vivid analogies, and genuine enthusiasm. Never lectures.
+Host A (${hostNames.A}): Curious, slightly nervous energy. Represents the eager learner. Reacts authentically — surprised, excited, confused, delighted.
+Host B (${hostNames.B}): Warm and engaging expert. Makes complex things accessible through stories, vivid analogies, and genuine enthusiasm. Never lectures.
 
 STYLE DIRECTION: ${styleGuide[style] || styleGuide.casual}
 TONE: ${toneGuide[tone] || toneGuide.friendly}
@@ -260,14 +277,19 @@ interface TtsResult {
   charEnds: number[];
 }
 
-async function ttsForHost(text: string, host: string): Promise<TtsResult> {
+async function ttsForHost(text: string, host: string, accent: string = "american"): Promise<TtsResult> {
   const { default: fetch } = await import("node-fetch");
   const response = await fetch("http://localhost:5001/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, host }),
+    body: JSON.stringify({ text, host, accent }),
   });
-  if (!response.ok) throw new Error(`TTS failed: ${response.statusText}`);
+  if (!response.ok) {
+    let errBody = "(no body)";
+    try { errBody = await response.text(); } catch {}
+    console.error(`[tts] HTTP ${response.status} from TTS server: ${errBody}`);
+    throw new Error(`TTS failed: ${response.status} — ${errBody}`);
+  }
   const json = await response.json() as any;
   const audio = Buffer.from(json.audio_base64, "base64");
   return {
@@ -362,13 +384,14 @@ Return ONLY the title — no punctuation at the end, no explanation.`,
 async function generateAudio(
   script: { host: string; text: string }[],
   sessionId: string,
+  accent: string = "american",
 ): Promise<string> {
   const audioSegments: Buffer[] = [];
 
   for (let i = 0; i < script.length; i++) {
     const turn = script[i];
     console.log(`[audio] Turn ${i + 1}/${script.length} [Host ${turn.host}]: "${turn.text.slice(0, 50)}..."`);
-    const buf = await ttsForHost(turn.text, turn.host);
+    const buf = await ttsForHost(turn.text, turn.host, accent);
     audioSegments.push(buf.audio);
   }
 
@@ -377,6 +400,20 @@ async function generateAudio(
   const filePath = path.join(AUDIO_DIR, filename);
   await writeFile(filePath, combined);
 
+  // Upload to Supabase Storage so audio works from any machine (local dev, etc.)
+  try {
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filename, combined, { contentType: "audio/mpeg", upsert: true });
+    if (error) {
+      console.warn("[storage] Upload failed:", error.message);
+    } else {
+      console.log("[storage] Uploaded:", filename);
+    }
+  } catch (e: any) {
+    console.warn("[storage] Upload error:", e?.message ?? e);
+  }
+
   return filename;
 }
 
@@ -384,13 +421,14 @@ router.get("/sessions", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId;
   const sessions = await db.listSessions(userId);
 
-  res.json(ListSessionsResponse.parse(sessions.map(s => ({
+  res.json(ListSessionsResponse.parse(sessions.map((s: any) => ({
     id: s.id,
     title: s.title,
     status: s.status as "idle" | "processing" | "ready" | "error",
     contentType: s.contentType as "url" | "text" | "pdf" | null,
     contentPreview: s.contentPreview,
     podcastStyle: s.podcastStyle as "casual" | "technical" | "storytelling" | null,
+    podcastAccent: s.podcastAccent ?? null,
     scriptTurns: s.scriptTurns,
     audioUrl: s.audioFilename ? `/api/sessions/${s.id}/audio/${s.audioFilename}` : null,
     createdAt: s.createdAt,
@@ -440,6 +478,7 @@ router.get("/sessions/:id", requireAuth, async (req, res): Promise<void> => {
     contentType: session.contentType,
     contentPreview: session.contentPreview,
     podcastStyle: session.podcastStyle,
+    podcastAccent: session.podcastAccent ?? null,
     scriptTurns: session.scriptTurns,
     audioUrl: session.audioFilename ? `/api/sessions/${session.id}/audio/${session.audioFilename}` : null,
     script: session.script ?? undefined,
@@ -575,12 +614,13 @@ router.post("/sessions/:id/generate", requireAuth, async (req, res): Promise<voi
       console.log(`[generate] Starting script generation for session ${sessionId}`);
       const script = await generatePodcastScript(chunks, { style, tone, accent, length, title });
       console.log(`[generate] Script done: ${script.length} turns. Starting audio...`);
-      const filename = await generateAudio(script, sessionId);
+      const filename = await generateAudio(script, sessionId, accent);
       console.log(`[generate] Audio done: ${filename}`);
 
       await db.updateSession(sessionId, {
         status: "ready",
         podcastStyle: style,
+        podcastAccent: accent,
         script,
         scriptTurns: script.length,
         audioFilename: filename,
@@ -619,15 +659,36 @@ router.get("/sessions/:id/audio/:filename", requireAuth, async (req, res): Promi
 
   const safeName = path.basename(rawFilename);
   const filePath = path.join(AUDIO_DIR, safeName);
+  const contentType = safeName.endsWith(".wav") ? "audio/wav" : "audio/mpeg";
 
+  // Try local filesystem first (fast path for same-machine access)
   try {
     const buffer = await readFile(filePath);
-    const contentType = safeName.endsWith(".wav") ? "audio/wav" : "audio/mpeg";
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", buffer.length);
     res.setHeader("Accept-Ranges", "bytes");
     res.send(buffer);
+    return;
   } catch {
+    // Not on local disk — fall through to Supabase Storage
+  }
+
+  // Fallback: Supabase Storage (works on any machine / local dev)
+  try {
+    const { data, error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .download(safeName);
+    if (error || !data) {
+      res.status(404).json({ error: "Audio file not found" });
+      return;
+    }
+    const buffer = Buffer.from(await data.arrayBuffer());
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.send(buffer);
+  } catch (e: any) {
+    console.error("[storage] Download error:", e?.message ?? e);
     res.status(404).json({ error: "Audio file not found" });
   }
 });

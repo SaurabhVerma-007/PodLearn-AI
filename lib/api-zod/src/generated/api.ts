@@ -27,6 +27,7 @@ export const ListSessionsResponseItem = zod.object({
   podcastStyle: zod
     .enum(["casual", "technical", "storytelling", "null"])
     .nullish(),
+  podcastAccent: zod.string().nullish(),
   scriptTurns: zod.number().nullish(),
   audioUrl: zod.string().nullish(),
   createdAt: zod.coerce.date(),
@@ -50,6 +51,7 @@ export const GetSessionResponse = zod.object({
   podcastStyle: zod
     .enum(["casual", "technical", "storytelling", "null"])
     .nullish(),
+  podcastAccent: zod.string().nullish(),
   scriptTurns: zod.number().nullish(),
   audioUrl: zod.string().nullish(),
   script: zod

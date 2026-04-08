@@ -16,7 +16,28 @@ const supabaseClient = createClient(
 
 const TABLE = "podcast_sessions";
 
+/**
+ * We store accent inside the podcast_style column as "style:accent"
+ * (e.g. "casual:indian"). Rows with no colon default accent to null.
+ * This avoids needing a schema migration for the podcast_accent column.
+ */
+function parseStyleAccent(raw: string | null): { style: string | null; accent: string | null } {
+  if (!raw) return { style: null, accent: null };
+  const idx = raw.indexOf(":");
+  if (idx === -1) return { style: raw, accent: null };
+  return { style: raw.slice(0, idx) || null, accent: raw.slice(idx + 1) || null };
+}
+
+function encodeStyleAccent(style: string | null | undefined, accent: string | null | undefined): string | null {
+  const s = style ?? null;
+  const a = accent ?? null;
+  if (!s && !a) return null;
+  if (!a) return s;
+  return `${s ?? ""}:${a}`;
+}
+
 function toSession(row: any): Session {
+  const { style, accent } = parseStyleAccent(row.podcast_style ?? null);
   return {
     id: row.id,
     userId: row.user_id ?? null,
@@ -25,7 +46,8 @@ function toSession(row: any): Session {
     contentType: row.content_type ?? null,
     contentPreview: row.content_preview ?? null,
     contentChunks: row.content_chunks ?? [],
-    podcastStyle: row.podcast_style ?? null,
+    podcastStyle: style,
+    podcastAccent: accent,
     scriptTurns: row.script_turns ?? null,
     script: row.script ?? [],
     audioFilename: row.audio_filename ?? null,
@@ -43,7 +65,9 @@ function toRow(data: Partial<Session> & { updatedAt?: Date | string }): Record<s
   if (data.contentType !== undefined) row.content_type = data.contentType;
   if (data.contentPreview !== undefined) row.content_preview = data.contentPreview;
   if (data.contentChunks !== undefined) row.content_chunks = data.contentChunks;
-  if (data.podcastStyle !== undefined) row.podcast_style = data.podcastStyle;
+  if (data.podcastStyle !== undefined || data.podcastAccent !== undefined) {
+    row.podcast_style = encodeStyleAccent(data.podcastStyle, data.podcastAccent);
+  }
   if (data.scriptTurns !== undefined) row.script_turns = data.scriptTurns;
   if (data.script !== undefined) row.script = data.script;
   if (data.audioFilename !== undefined) row.audio_filename = data.audioFilename;
@@ -52,6 +76,8 @@ function toRow(data: Partial<Session> & { updatedAt?: Date | string }): Record<s
   }
   return row;
 }
+
+export { supabaseClient as supabase };
 
 export const db = {
   async listSessions(userId: string): Promise<Session[]> {

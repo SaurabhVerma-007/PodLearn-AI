@@ -20,4 +20,10 @@ export const sessionsTable = pgTable("podcast_sessions", {
 
 export const insertSessionSchema = createInsertSchema(sessionsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertSession = z.infer<typeof insertSessionSchema>;
-export type Session = typeof sessionsTable.$inferSelect;
+
+// podcastAccent is a virtual field derived from the podcast_style column ("style:accent")
+// It is not a real DB column — see db.ts parseStyleAccent / encodeStyleAccent.
+export type Session = Omit<typeof sessionsTable.$inferSelect, "podcastStyle"> & {
+  podcastStyle: string | null;
+  podcastAccent: string | null;
+};
