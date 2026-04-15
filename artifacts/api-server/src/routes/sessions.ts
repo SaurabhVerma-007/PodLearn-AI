@@ -234,7 +234,7 @@ No markdown, no preamble, no explanation — just the raw JSON array.`;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        model: "meta/llama3-70b-instruct",
+        model: "meta/llama-3.3-70b-instruct",
         max_tokens: 4096,
         messages,
       });
@@ -354,7 +354,7 @@ async function generateTitle(content: string): Promise<string> {
   try {
     const preview = content.slice(0, 3000);
     const response = await openai.chat.completions.create({
-      model: "meta/llama3-70b-instruct",
+      model: "meta/llama-3.3-70b-instruct",
       max_tokens: 60,
       messages: [
         {
@@ -421,7 +421,7 @@ router.get("/sessions", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId;
   const sessions = await db.listSessions(userId);
 
-  res.json(ListSessionsResponse.parse(sessions.map(s => ({
+  res.json(ListSessionsResponse.parse(sessions.map((s: any) => ({
     id: s.id,
     title: s.title,
     status: s.status as "idle" | "processing" | "ready" | "error",
@@ -725,7 +725,7 @@ router.post("/sessions/:id/ask", requireAuth, async (req, res): Promise<void> =>
   const context = relevantChunks.join("\n\n---\n\n");
 
   const response = await openai.chat.completions.create({
-    model: "meta/llama3-70b-instruct",
+    model: "meta/llama-3.3-70b-instruct",
     max_tokens: 1024,
     messages: [
       {

@@ -428,20 +428,20 @@ function useDeleteSession() {
 
 function GeneratingCard({ session }: { session: PodcastSession }) {
   const [elapsed, setElapsed] = useState(0);
-  const ESTIMATED_DURATION = 150;
+  const ESTIMATED_DURATION = 120;
+  const startRef = useRef(Date.now());
 
   useEffect(() => {
-    const createdMs = session.createdAt ? new Date(session.createdAt).getTime() : Date.now();
-    const initial = Math.max(0, (Date.now() - createdMs) / 1000);
-    setElapsed(initial);
+    startRef.current = Date.now();
+    setElapsed(0);
     const interval = setInterval(() => {
-      setElapsed((prev) => prev + 0.5);
+      setElapsed((Date.now() - startRef.current) / 1000);
     }, 500);
     return () => clearInterval(interval);
-  }, [session.createdAt]);
+  }, []);
 
-  const progress = Math.min(95, (elapsed / ESTIMATED_DURATION) * 100);
-  const progressLabel = progress < 20 ? "Preparing content..." : progress < 50 ? "Writing dialogue..." : progress < 80 ? "Recording audio..." : "Almost ready...";
+  const progress = Math.min(90, (elapsed / ESTIMATED_DURATION) * 100);
+  const progressLabel = progress < 25 ? "Preparing content..." : progress < 55 ? "Writing dialogue..." : progress < 80 ? "Recording audio..." : "Finalising...";
 
   return (
     <div className="relative rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 p-4 overflow-hidden aspect-[3/4] flex flex-col justify-between shadow-md">
