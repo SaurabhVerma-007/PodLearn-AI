@@ -34,10 +34,19 @@ if (!clerkPubKey) {
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
 }
 
+const hideOAuth = {
+  elements: {
+    socialButtonsRoot: { display: "none" },
+    socialButtonsBlockButton: { display: "none" },
+    dividerRow: { display: "none" },
+    dividerText: { display: "none" },
+  },
+};
+
 function SignInPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} appearance={hideOAuth} />
     </div>
   );
 }
@@ -45,7 +54,7 @@ function SignInPage() {
 function SignUpPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} appearance={hideOAuth} />
     </div>
   );
 }
