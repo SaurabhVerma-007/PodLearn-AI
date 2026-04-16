@@ -1,3 +1,26 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="180" height="180" rx="36" fill="url(#bg)"/>
+
+  <!-- Headphone band arc -->
+  <path
+    d="M 46 98 A 44 44 0 0 1 134 98"
+    stroke="white"
+    stroke-width="13"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Left ear cup -->
+  <rect x="30" y="90" width="28" height="38" rx="9" fill="white"/>
+
+  <!-- Right ear cup -->
+  <rect x="122" y="90" width="28" height="38" rx="9" fill="white"/>
 </svg>
