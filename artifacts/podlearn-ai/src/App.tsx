@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
