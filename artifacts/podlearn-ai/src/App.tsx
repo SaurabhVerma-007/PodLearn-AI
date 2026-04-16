@@ -25,6 +25,12 @@ function stripBase(path: string): string {
 }
 
 if (!clerkPubKey) {
+  document.getElementById("root")!.innerHTML =
+    `<div style="font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:12px;color:#dc2626;">
+      <b style="font-size:1.2rem">Configuration Error</b>
+      <p style="color:#374151;margin:0">VITE_CLERK_PUBLISHABLE_KEY is not set.</p>
+      <p style="color:#6b7280;font-size:0.85rem;margin:0">Add it to your Vercel environment variables and redeploy.</p>
+    </div>`;
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
 }
 
