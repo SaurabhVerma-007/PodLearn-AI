@@ -4,10 +4,11 @@ WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
+COPY preinstall.mjs ./
 COPY lib/ lib/
 COPY artifacts/api-server/ artifacts/api-server/
 
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+RUN npm install -g pnpm && pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm --filter @workspace/api-server run build
 
 FROM node:20-alpine
