@@ -7,9 +7,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        generateValue: false
-        value: "8080"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -29,8 +26,5 @@ services:
     dockerfilePath: tts-server/Dockerfile
     plan: free
     envVars:
-      - key: PORT
-        generateValue: false
-        value: "5001"
       - key: ELEVENLABS_API_KEY
         sync: false
