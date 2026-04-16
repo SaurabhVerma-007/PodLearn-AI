@@ -23,6 +23,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const TTS_BASE_URL = (process.env.TTS_SERVER_URL ?? "http://localhost:5001").replace(/\/+$/, "");
 const AUDIO_DIR = path.join(__dirname, "..", "..", "audio");
 
 await mkdir(AUDIO_DIR, { recursive: true });
@@ -279,7 +281,7 @@ interface TtsResult {
 
 async function ttsForHost(text: string, host: string, accent: string = "american"): Promise<TtsResult> {
   const { default: fetch } = await import("node-fetch");
-  const response = await fetch("http://localhost:5001/tts", {
+  const response = await fetch(`${TTS_BASE_URL}/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, host, accent }),

@@ -10,6 +10,7 @@ import {
   useAskQuestion,
   getListSessionsQueryKey,
   getGetSessionQueryKey,
+  getBaseUrl,
 } from "@workspace/api-client-react";
 import type {
   PodcastSession,
@@ -44,6 +45,13 @@ import {
   MessageSquare,
   Ellipsis,
 } from "lucide-react";
+
+function resolveApiUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  const base = getBaseUrl();
+  return base ? `${base}${url}` : url;
+}
 
 type View = "generate" | "library" | "player";
 type StyleOption = "casual" | "technical" | "storytelling";
@@ -417,7 +425,7 @@ function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+      const res = await fetch(resolveApiUrl(`/api/sessions/${id}`), { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error("Delete failed");
     },
     onSuccess: () => {
@@ -502,9 +510,9 @@ function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
   const { data: sessions, isLoading } = useListSessions({
     query: {
       queryKey: getListSessionsQueryKey(),
-      refetchInterval: (q) => {
+      refetchInterval: (q: any) => {
         const data = q.state.data;
-        return data?.some((s) => s.status === "processing") ? 4000 : false;
+        return data?.some((s: any) => s.status === "processing") ? 4000 : false;
       },
     },
   });
@@ -545,7 +553,7 @@ function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {processingSessions.map((session) => (
+                {processingSessions.map((session: PodcastSession) => (
                   <GeneratingCard key={session.id} session={session} />
                 ))}
               </div>
@@ -561,7 +569,7 @@ function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {errorSessions.map((session) => (
+                {errorSessions.map((session: PodcastSession) => (
                   <ErrorCard key={session.id} session={session} />
                 ))}
               </div>
@@ -572,7 +580,7 @@ function LibraryPage({ onPlay }: { onPlay: (id: string) => void }) {
             <div>
               <h2 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wider">Ready to play</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {readySessions.map((session) => (
+                {readySessions.map((session: PodcastSession) => (
                   <PodcastCard key={session.id} session={session} onPlay={() => onPlay(session.id)} />
                 ))}
               </div>
@@ -616,7 +624,7 @@ function PodcastCard({ session, onPlay }: { session: PodcastSession; onPlay: () 
       const token = await getToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(session.audioUrl, { headers });
+      const res = await fetch(resolveApiUrl(session.audioUrl), { headers });
       if (!res.ok) return;
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -788,7 +796,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
   const { data: session } = useGetSession(sessionId, {
     query: {
       queryKey: getGetSessionQueryKey(sessionId),
-      refetchInterval: (q) => (q.state.data?.status === "processing" ? 3000 : false),
+      refetchInterval: (q: any) => (q.state.data?.status === "processing" ? 3000 : false),
     },
   });
 
@@ -849,7 +857,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
 
   useEffect(() => {
     if (duration > 0 && transcript && transcript.length > 0) {
-      const totalChars = transcript.reduce((sum, t) => sum + t.text.length, 0);
+      const totalChars = transcript.reduce((sum: number, t: DialogueTurn) => sum + t.text.length, 0);
       let cumulative = 0;
       const ts = transcript.map((t) => {
         const proportion = t.text.length / totalChars;
@@ -875,7 +883,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
         const token = await getToken();
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(audioUrl, { headers, cache: "no-store" });
+        const res = await fetch(resolveApiUrl(audioUrl), { headers, cache: "no-store" });
         if (cancelled) return;
         if (!res.ok) {
           const msg = res.status === 404
@@ -988,7 +996,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
       const token = await getToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(url, { headers });
+      const res = await fetch(resolveApiUrl(url), { headers });
       if (!res.ok) return null;
       const blob = await res.blob();
       return URL.createObjectURL(blob);
@@ -1341,7 +1349,7 @@ const PlayerPage = forwardRef<PlayerHandle, PlayerPageProps>(function PlayerPage
               </div>
               <div className="max-h-80 overflow-y-auto" ref={transcriptContainerRef}>
                 <div className="py-2">
-                  {transcript.map((turn, idx) => {
+                  {transcript.map((turn: DialogueTurn, idx: number) => {
                     const isActive = idx === activeTurnIndex;
                     const isHostA = turn.host === "A";
                     return (
